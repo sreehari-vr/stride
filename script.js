@@ -15,6 +15,15 @@
     return el;
   };
 
+  /* ---------- Reel/marquee videos: visible sound toggle (only for clips with real audio) ---------- */
+  const ensureMuteButton = (frame, video) => {
+    if (!frame || !video || !video.hasAttribute('data-sound')) return null;
+    let btn = $('.creel__mute', frame);
+    if (btn) return btn;
+    frame.insertAdjacentHTML('beforeend', '<button type="button" class="creel__mute" aria-label="Toggle sound" aria-pressed="false"><svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16.2 8.8a5 5 0 0 1 0 6.4"/><path d="M19 6a9 9 0 0 1 0 12"/></svg><svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16 9l5 6M21 9l-5 6"/></svg></button>');
+    return $('.creel__mute', frame);
+  };
+
   /* ---------- Scroll loop: one rAF-throttled handler for all scroll work ---------- */
   const scrollHandlers = [];
   let ticking = false;
@@ -708,15 +717,28 @@
         const v = $('video', slide);
         if (!v) return;
         const hasSound = v.hasAttribute('data-sound');
-        const play = (sound) => { v.muted = !(hasSound && sound); const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; v.play().catch(() => {}); }); slide.classList.add('is-playing'); };
-        const stop = () => { v.pause(); v.muted = true; slide.classList.remove('is-playing'); };
+        const sync = () => {
+          slide.classList.toggle('is-unmuted', !v.muted);
+          const btn = $('.creel__mute', slide); if (btn) btn.setAttribute('aria-pressed', String(!v.muted));
+        };
+        const play = (sound) => { v.muted = !(hasSound && sound); const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; sync(); v.play().catch(() => {}); }); slide.classList.add('is-playing'); sync(); };
+        const stop = () => { v.pause(); v.muted = true; slide.classList.remove('is-playing'); sync(); };
         slide.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') play(false); });
         slide.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') stop(); });
-        slide.addEventListener('click', () => {
+        slide.addEventListener('click', (e) => {
           if (moved) { moved = false; return; }
-          if (hasSound && !v.paused && v.muted) { v.muted = false; return; }
+          if (e.target.closest('.creel__mute')) return;
+          if (hasSound && !v.paused && v.muted) { v.muted = false; sync(); return; }
           v.paused ? play(true) : stop();
         });
+        if (hasSound) {
+          const btn = ensureMuteButton($('.creel__frame', slide), v);
+          if (btn) btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            v.muted = !v.muted;
+            if (!v.muted && v.paused) play(true); else sync();
+          });
+        }
       });
       const slides = $$('.creel', track);
       slides.forEach((s, i) => {
@@ -761,14 +783,33 @@
     const btn = $('[data-duo-pause]', root); const label = $('[data-duo-pause-label]', root);
     const still = reduceMotion;
     let userPaused = false;
-    const setEq = (it) => { const fr = $('.creel__frame', it); if (fr && $('video', it) && !$('.creel__eq', fr)) fr.insertAdjacentHTML('beforeend', '<span class="creel__eq" aria-hidden="true"><i></i><i></i><i></i></span>'); };
+    const syncMute = (it) => {
+      const v = $('video', it); if (!v) return;
+      it.classList.toggle('is-unmuted', !v.muted);
+      const btn = $('.creel__mute', it); if (btn) btn.setAttribute('aria-pressed', String(!v.muted));
+    };
+    const setEq = (it) => {
+      const fr = $('.creel__frame', it); const v = $('video', it);
+      if (!fr || !v) return;
+      if (!$('.creel__eq', fr)) fr.insertAdjacentHTML('beforeend', '<span class="creel__eq" aria-hidden="true"><i></i><i></i><i></i></span>');
+      const btn = ensureMuteButton(fr, v);
+      if (btn && !btn.dataset.bound) {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          v.muted = !v.muted;
+          if (!v.muted && v.paused) play(it, true); else syncMute(it);
+        });
+      }
+    };
     const play = (it, sound) => {
       const v = $('video', it); if (!v) return;
       v.muted = !(sound && v.hasAttribute('data-sound'));
-      const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; v.play().catch(() => {}); });
+      const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; syncMute(it); v.play().catch(() => {}); });
       it.classList.add('is-playing');
+      syncMute(it);
     };
-    const stop = (it) => { const v = $('video', it); if (!v) return; v.pause(); v.muted = true; it.classList.remove('is-playing'); };
+    const stop = (it) => { const v = $('video', it); if (!v) return; v.pause(); v.muted = true; it.classList.remove('is-playing'); syncMute(it); };
     const st = rows.map((row) => {
       const track = $('.duo__track', row);
       const items = $$('.creel', track);
@@ -807,8 +848,8 @@
         it.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !userPaused) play(it, false); });
         it.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && it !== s.spot) stop(it); });
         it.addEventListener('click', (e) => {
-          if (e.target.closest('a')) return;
-          if (v.hasAttribute('data-sound') && !v.paused && v.muted) { v.muted = false; return; }
+          if (e.target.closest('a') || e.target.closest('.creel__mute')) return;
+          if (v.hasAttribute('data-sound') && !v.paused && v.muted) { v.muted = false; syncMute(it); return; }
           v.paused ? play(it, true) : stop(it);
         });
       });

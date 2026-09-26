@@ -443,6 +443,13 @@ html.has-drawer { overflow: hidden; }
 .creel__play { position: absolute; left: 14px; bottom: 14px; width: 44px; height: 44px; border-radius: 50%; background: rgba(16,19,20,.7); display: grid; place-items: center; color: var(--paper); font-size: .9rem; transition: background .3s ease, opacity .3s ease; pointer-events: none; }
 .creel.is-playing .creel__play { opacity: 0; }
 .creel:hover .creel__play { background: var(--ember); color: var(--ink); }
+.creel__mute { position: absolute; right: 14px; bottom: 14px; width: 36px; height: 36px; border-radius: 50%; background: rgba(16,19,20,.7); border: none; padding: 0; display: grid; place-items: center; color: var(--paper); cursor: pointer; z-index: 2; transition: background .3s ease, transform .2s ease; }
+.creel__mute svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.creel__mute .icon-on { display: none; }
+.creel.is-unmuted .creel__mute .icon-on { display: block; }
+.creel.is-unmuted .creel__mute .icon-off { display: none; }
+.creel__mute:hover { background: var(--ember); color: var(--ink); transform: scale(1.08); }
+.creel__mute:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
 .creel__name { margin-top: 14px; display: grid; gap: 4px; }
 .creel__name b { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; letter-spacing: -.02em; }
 .creel__name span { color: rgba(255,255,255,.55); font-size: .6rem; }
