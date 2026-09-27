@@ -1,7 +1,16 @@
 <?php
-// Stride Labs contact form handler. Sends the enquiry to info@thestridelabs.com.
-const TO = 'info@thestridelabs.com';
-const FROM = 'no-reply@thestridelabs.com';
+// Stride Labs contact form handler. Sends the enquiry to info@thestridelabs.com
+// via SMTP (PHPMailer), since PHP's built-in mail() is unreliable on shared
+// hosting and was silently dropping submissions.
+
+require __DIR__ . '/vendor/phpmailer/src/Exception.php';
+require __DIR__ . '/vendor/phpmailer/src/PHPMailer.php';
+require __DIR__ . '/vendor/phpmailer/src/SMTP.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception as PHPMailerException;
+
+$cfg = require __DIR__ . '/mail-config.php';
 
 $wantsJson = isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false;
 
@@ -53,16 +62,30 @@ $body = "New enquiry from thestridelabs.com\n\n"
       . "Name: $name\nEmail: $email\nPhone: " . ($phone ?: '-') . "\nCompany / website: " . ($company ?: '-') . "\n"
       . "Interested in: " . ($services ? implode(', ', $services) : '-') . "\n\nMessage:\n$message\n";
 
-$headers = [
-    'From: Stride Labs Website <' . FROM . '>',
-    'Reply-To: ' . $name . ' <' . $email . '>',
-    'Content-Type: text/plain; charset=UTF-8',
-    'X-Mailer: PHP/' . PHP_VERSION,
-];
-$subject = '=?UTF-8?B?' . base64_encode('New project enquiry: ' . $name) . '?=';
+$mail = new PHPMailer(true);
+try {
+    $mail->isSMTP();
+    $mail->Host = $cfg['host'];
+    $mail->Port = $cfg['port'];
+    $mail->SMTPSecure = $cfg['secure'] === 'tls' ? PHPMailer::ENCRYPTION_STARTTLS : PHPMailer::ENCRYPTION_SMTPS;
+    $mail->SMTPAuth = true;
+    $mail->Username = $cfg['username'];
+    $mail->Password = $cfg['password'];
+    $mail->CharSet = 'UTF-8';
 
-if (!mail(TO, $subject, $body, implode("\r\n", $headers), '-f' . FROM)) {
+    $mail->setFrom($cfg['from'], $cfg['fromName']);
+    $mail->addAddress($cfg['to']);
+    $mail->addReplyTo($email, $name);
+
+    $mail->Subject = 'New project enquiry: ' . $name;
+    $mail->Body = $body;
+    $mail->isHTML(false);
+
+    $mail->send();
+} catch (PHPMailerException $e) {
+    error_log('Contact form mail failed: ' . $mail->ErrorInfo);
     respond(false, 'We couldn\'t send your message. Please email info@thestridelabs.com directly.', 500);
 }
+
 @touch($lock);
 respond(true, 'Thanks, we\'ve got your message and will be in touch.');
